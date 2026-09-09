@@ -1,0 +1,9 @@
+# Contexto de build enxuto
+.git
+.env
+*.log
+.DS_Store
+/docs
+/.github
+/scripts
+/tmp
