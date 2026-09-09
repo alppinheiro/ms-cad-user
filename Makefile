@@ -12,7 +12,7 @@ RATE ?= $(LOAD_RATE)
 KAFKA_BROKERS ?= localhost:9095
 MONGODB_URI ?= mongodb://localhost:27017
 
-.PHONY: help fmt build vet test check up infra worker down ps logs \
+.PHONY: help fmt build vet test check up infra worker down ps logs logs-once \
 	load run-worker mongo-shell topics consume reset
 
 help:
@@ -26,7 +26,8 @@ help:
 	@echo "  make infra        - sobe apenas Mongo + Kafka + GUIs + kafka-init"
 	@echo "  make worker       - (re)constrói e sobe só o worker"
 	@echo "  make down         - derruba a stack (mantém volumes)"
-	@echo "  make ps / logs    - status / logs (make logs SVC=worker para um só)"
+	@echo "  make ps / logs    - status / logs em tempo real (SVC= para filtrar)"
+	@echo "  make logs-once    - mostra o último estado dos logs e encerra"
 	@echo "  make load         - roda o generator no host (TOTAL= RATE= SEED=)"
 	@echo "  make run-worker   - roda o worker no host (go run)"
 	@echo "  make mongo-shell  - mongosh dentro do container"
@@ -68,6 +69,9 @@ ps:
 
 logs:
 	$(COMPOSE) logs -f --tail=100 $(SVC)
+
+logs-once:
+	$(COMPOSE) logs --tail=20 $(SVC)
 
 reset:
 	$(COMPOSE) down -v
