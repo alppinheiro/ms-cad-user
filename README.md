@@ -124,6 +124,10 @@ Reexecutar com a mesma seed não duplica: o upsert por CPF atualiza os registros
 
 ## Próximas fases (estudo)
 
+Consulte o **roadmap completo em [`docs/ROADMAP.md`](docs/ROADMAP.md)** (itens
+registrados para não esquecer: API REST, DLQ real, Redis, observabilidade,
+bateria de consultas com/sem índice, testes de integração e CI, etc.).
+
 1. **Fase 3 — Estudo de consultas**: popular 500k usuários e usar
    `scripts/mongo/consultas_estudo.js` (filtros, agregações, `explain`).
 2. **Fase 4 — Evoluções**: API REST de cadastro/consulta, DLQ real, Redis para

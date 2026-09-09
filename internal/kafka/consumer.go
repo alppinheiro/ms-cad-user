@@ -9,6 +9,17 @@ import (
 	"github.com/IBM/sarama"
 )
 
+// ===========================================================================
+// CONSUMIDOR EM LOTE (consumer group)
+// ---------------------------------------------------------------------------
+// O consumo é feito com o padrão de consumer group do Kafka (escalável:
+// rodar N instâncias divide as partições entre elas) e em LOTE para conseguir
+// acompanhar milhares de mensagens/segundo — gravar 1 documento por vez no
+// Mongo não sustentaria a vazão do generator.
+// Garantia usada: at-least-once (o Kafka pode reentregar) + idempotência no
+// Mongo por CPF → reentrega vira update, nunca duplicata.
+// ===========================================================================
+
 // BatchProcessor processa um lote de mensagens do Kafka.
 type BatchProcessor func(ctx context.Context, msgs []*sarama.ConsumerMessage) error
 
@@ -28,6 +39,8 @@ type BatchHandler struct {
 }
 
 // NewBatchHandler cria o handler consumidor com os parâmetros de lote.
+// Os ifs de guarda garantem valores utilizáveis mesmo se a config vier zerada
+// (defesa contra env errada — ex.: WORKER_BATCH_SIZE=0).
 func NewBatchHandler(batchSize int, flushInterval time.Duration, retryMax int, process BatchProcessor) *BatchHandler {
 	if batchSize <= 0 {
 		batchSize = 1000
@@ -52,7 +65,17 @@ func (h *BatchHandler) Setup(sarama.ConsumerGroupSession) error { return nil }
 // Cleanup finaliza a sessão.
 func (h *BatchHandler) Cleanup(sarama.ConsumerGroupSession) error { return nil }
 
-// ConsumeClaim lê as mensagens de uma partição acumulando em lotes.
+// ConsumeClaim lê as mensagens de UMA partição acumulando em lotes.
+// Três gatilhos disparam o flush do lote:
+//  1. `len(buf) >= batchSize`  → throughput: encheu o lote, grava;
+//  2. `<-ticker.C`             → latência: passou o flushInterval e sobrou
+//     lote pequeno, grava mesmo assim (evita mensagem "encalhada" esperando
+//     o lote encher — crítico no fim da carga);
+//  3. `sess.Context().Done()`  → rebalance/shutdown: grava o que ficou e sai
+//     para a sessão encerrar de forma limpa.
+//
+// O consumo de uma partição é sequencial (uma goroutine por partição no
+// Sarama) — é isso que preserva a ordem por chave dentro da partição.
 func (h *BatchHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	buf := make([]*sarama.ConsumerMessage, 0, h.batchSize)
 	ticker := time.NewTicker(h.flushInterval)
@@ -90,6 +113,18 @@ func (h *BatchHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 }
 
 // processBatch executa o processador com retries exponenciais.
+//
+// Retry com backoff (200ms * 2 a cada tentativa): erros de Mongo/infra costumam
+// ser transitórios e o backoff dá tempo de o serviço se recuperar — retry
+// imediato em loop só sobrecarregaria o banco.
+// Ao final do processamento com sucesso, chamamos sess.MarkMessage para cada
+// mensagem: isso marca o OFFSET como processado. O commit de fato ocorre via
+// AUTO-COMMIT do Sarama (1s) — não precisamos commitar manualmente porque a
+// idempotência por CPF torna seguro reprocessar o que eventualmente ficar
+// sem commit (at-least-once + upsert).
+// Esgotou os retries? Não travamos o consumer group (poison-pill travaria
+// TODAS as partições): contabilizamos como "morto" e seguimos. O item DLQ do
+// roadmap prevê publicar esses lotes em cad-user.dlq para análise posterior.
 func (h *BatchHandler) processBatch(sess sarama.ConsumerGroupSession, msgs []*sarama.ConsumerMessage) error {
 	h.consumed.Add(int64(len(msgs)))
 
@@ -130,6 +165,17 @@ func (h *BatchHandler) Stats() (consumed, batches, dead int64) {
 }
 
 // ConsumerGroupConfig devolve a configuração padrão do consumer group.
+// Escolhas:
+//   - Offsets.Initial = OffsetOldest: na PRIMEIRA vez (sem offset commitado) o
+//     grupo começa do início do tópico — se subirmos o worker depois do
+//     generator, ele processa o histórico em vez de pular as mensagens;
+//     execuções seguintes retomam do último offset commitado;
+//   - Return.Errors = true: expõe erros internos no canal cg.Errors() (o main
+//     precisa drenar esse canal para logs);
+//   - AutoCommit 1s: compromisso entre durabilidade (commits frequentes) e
+//     custo (commits demais geram carga no __consumer_offsets);
+//   - MaxProcessingTime = 30s: teto de segurança para um lote não travar a
+//     sessão além do tempo que o Kafka considera o consumidor "vivo".
 func ConsumerGroupConfig() *sarama.Config {
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Return.Errors = true

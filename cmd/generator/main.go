@@ -24,6 +24,10 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	cfg := config.Load()
 
+	// Flags de linha de comando com default vindo do .env: assim o mesmo
+	// binário atende tanto `make load` (TOTAL/RATE do .env) quanto execução
+	// manual com override (ex.: go run ./cmd/generator -total 1000 -rate 500).
+	// A seed torna a carga REPRODUZÍVEL (mesma seed = mesmos CPFs/emails).
 	var (
 		total   = flag.Int64("total", envInt64("LOAD_TOTAL", 500000), "quantidade de usuários a gerar")
 		rate    = flag.Int64("rate", envInt64("LOAD_RATE", 2000), "mensagens por segundo (0 = sem limite)")
@@ -47,9 +51,15 @@ func main() {
 		brokerList = strings.Split(*brokers, ",")
 	}
 
+	// signal.NotifyContext: Ctrl+C / SIGTERM cancelam o contexto. No meio da
+	// carga isso interrompe o LOOP de publicação com elegância — sem matar o
+	// processo no meio de um envio e sem "esquecer" mensagens sem flush.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Abre o produtor ASSÍNCRONO idempotente (ver internal/kafka/producer.go).
+	// Falha aqui = bootstrap problemático (broker inacessível/config inválida);
+	// melhor morrer já no início do que "publicar no vazio".
 	prod, err := kafkainfra.NewProducer(brokerList, *topic)
 	if err != nil {
 		slog.Error("não foi possível abrir o produtor", "erro", err)
@@ -60,7 +70,11 @@ func main() {
 	start := time.Now()
 	doneMetrics := make(chan struct{})
 
-	// Métricas ao vivo a cada segundo.
+	// Métricas ao vivo a cada segundo, em GOROUTINE separada (não atrapalha o
+	// loop de publicação). O `rate_1s` é calculado pela DIFERENÇA dos contadores
+	// entre ticks — mais preciso do que contar dentro do loop (que sofreria
+	// interferência do rate-limit). doneMetrics encerra a goroutine ao final,
+	// evitando vazamento.
 	go func() {
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
@@ -83,6 +97,10 @@ func main() {
 		}
 	}()
 
+	// Limitação de taxa (rate): calculamos o intervalo por mensagem
+	// (time.Second/rate) e usamos um cronograma ABSOLUTO (start + i*step) em vez
+	// de dormir um valor fixo por iteração. Assim a média fica estável mesmo com
+	// variação no tempo de cada iteração — é o que mantém ~2.000 msg/s estáveis.
 	step := time.Duration(0)
 	if *rate > 0 {
 		step = time.Second / time.Duration(*rate)
@@ -90,6 +108,14 @@ func main() {
 	enviadas := int64(0)
 	interrompido := false
 
+	// Loop principal de geração:
+	//   1. verifica o contexto (interrupção graciosa) — select com default p/
+	//      não bloquear quando não há sinal;
+	//   2. gera um usuário sintético determinístico (mesma seed → mesmos dados);
+	//   3. serializa o envelope (event_id/type/version/occurred_at/payload) —
+	//      JSON de propósito, para leitura fácil no Kafka UI;
+	//   4. publica com a CHAVE = CPF (mesmo CPF cai na mesma partição).
+	// O Publish bloqueia sob backpressure (buffer cheio) — nunca estoura RAM.
 loop:
 	for enviadas < *total {
 		select {
@@ -151,6 +177,9 @@ loop:
 		"duracao", elapsed.Round(time.Millisecond),
 		"throughput_msgs_s", int(float64(ok)/elapsed.Seconds()),
 	)
+	// Sumário final. O exit code (0 ou 1) permite usar o generator em CI/scripts:
+	// se qualquer mensagem falhou ou não foi confirmada, a carga NÃO é tratada
+	// como sucesso — evita "acharmos" que 500k foram entregues quando não foram.
 	if interrompido {
 		slog.Warn("execução interrompida pelo usuário")
 	}

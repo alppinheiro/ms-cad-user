@@ -21,7 +21,28 @@ type Producer struct {
 	failures  atomic.Int64
 }
 
-// NewProducer configura e abre um produtor assíncrono idempotente.
+// NewProducer configura e abre um produtor assíncrono idempotente. Cada opção
+// abaixo foi escolhida pensando em throughput ALTO com durabilidade:
+//
+//   - RequiredAcks = WaitForAll (acks=all): o broker só confirma depois de
+//     gravar no líder — troca um pouco de latência por zero perda em failover
+//     (equivalente ao que sistemas de produção usam por padrão);
+//   - Idempotent = true: o PRODUTOR não injeta duplicata quando há retry
+//     (protocolo KIP-98). Exige acks=all e no máx. 1 requisição em voo
+//     (MaxOpenRequests=1) — por isso ambos aparecem juntos;
+//   - Retry.Max/Backoff: reenvio automático com backoff; combinado com a
+//     idempotência, um timeout de rede não gera mensagem duplicada;
+//   - Return.Successes = true: recebemos confirmação por mensagem (usada para
+//     medir throughput real e saber quando tudo foi entregue — essencial no
+//     generator para garantir "carga 100% confirmada");
+//   - Compression = Snappy: menos bytes na rede/disco com CPU baixa (gzip
+//     comprime mais, porém custa mais CPU — para mensagens pequenas Snappy é o
+//     melhor custo/benefício);
+//   - Flush.Messages/Frequency: acumula até 500 msgs ou 250ms antes de enviar
+//     → muito mais eficiente que 1 request por mensagem;
+//   - Partitioner = NewHashPartitioner: usa o HASH da CHAVE (CPF) para escolher
+//     a partição → o mesmo CPF cai sempre na mesma partição (ordem garantida
+//     por usuário e reprocessamento previsível).
 func NewProducer(brokers []string, topic string) (*Producer, error) {
 	cfg := sarama.NewConfig()
 
@@ -65,7 +86,11 @@ func (p *Producer) drain() {
 	}
 }
 
-// Publish envia key/value para o tópico do produtor (bloqueia sob backpressure).
+// Publish envia key/value para o tópico do produtor. O envio é feito pelo canal
+// Input() do AsyncProducer: se o buffer interno estiver cheio (Kafka mais lento
+// que o produtor), esta chamada BLOQUEIA — isso é proposital, pois cria
+// backpressure natural: o gerador não "atropela" o broker nem estoura memória
+// (em vez de descartar mensagens silenciosamente).
 func (p *Producer) Publish(key, value []byte) {
 	p.ap.Input() <- &sarama.ProducerMessage{
 		Topic: p.topic,
@@ -80,7 +105,12 @@ func (p *Producer) Counters() (successes, failures int64) {
 }
 
 // Close aguarda o flush de todas as mensagens pendentes, o encerramento dos
-// canais e o fim do dreno de contadores (evita race na leitura final).
+// canais e o fim do dreno de contadores. A ordem importa:
+//  1. ap.Close() → Sarama para de aceitar mensagens e aguarda o envio/flush;
+//  2. <-p.done  → só depois o dreno terminou de contar Successes/Errors.
+//
+// Sem o passo 2, o generator leria a contagem final ANTES de o dreno acabar
+// (race que causava "confirmadas < enviadas" mesmo com entrega 100% ok).
 func (p *Producer) Close() error {
 	err := p.ap.Close()
 	<-p.done

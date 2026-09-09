@@ -1,7 +1,24 @@
 package domain
 
+// ===========================================================================
+// DADOS-BASE DO GERADOR SINTÉTICO (somente para carga de estudo)
+// ---------------------------------------------------------------------------
+// Este arquivo NÃO é regra de negócio — é o "dicionário" de dados realistas
+// usados para popular o Kafka/Mongo em massa. As escolhas aqui existem para
+// que as consultas de estudo façam sentido:
+//   - Todas as 27 UFs com cidades reais (capital + principais) → permite
+//     agrupar/filtrar por UF e cidade com volume distribuído;
+//   - DDD coerente com a cidade sorteada e faixa de CEP coerente com a UF →
+//     endereço e telefone não se contradizem (dado "sujo" atrapalharia o estudo);
+//   - Nomes, sobrenomes, bairros e logradouros em pt-BR para buscas textuais.
+//
+// Representação do CEP: guardamos o PREFIXO (5 dígitos) como int e formatamos
+// com %05d na hora de montar o endereço. Ex.: 1000 vira "01000", 13000 vira
+// "13000". Assim as faixas por cidade ficam fáceis de escrever e ler.
+// ===========================================================================
+
 // cidade representa uma cidade sintética com DDD e faixa de prefixo de CEP.
-// Os prefixos de CEP são números de 5 dígitos (ex.: 1000 => "01000").
+// cepMin/cepMax delimitam a faixa de prefixos (5 dígitos) válida p/ a cidade.
 type cidade struct {
 	nome   string
 	ddd    int
