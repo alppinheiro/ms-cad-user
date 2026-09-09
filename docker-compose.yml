@@ -133,6 +133,26 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # 2ª réplica do worker para demonstrar ESCALABILIDADE HORIZONTAL:
+  # mesmo consumer group => o Kafka divide as 6 partições entre as duas
+  # instâncias (3 para cada). Para voltar a 1 instância: docker-compose stop worker-2
+  worker-2:
+    image: ms-cad-user-worker
+    container_name: mscaduser-worker-2
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGO_DATABASE: cad_user
+      MONGO_COLLECTION: users
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
   # ---------------------------------------------------------------------------
   # Generator (carga em massa). Roda pontualmente via profile:
   #   docker-compose run --rm generator --total 1000 --rate 200
