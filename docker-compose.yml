@@ -1,0 +1,156 @@
+# =============================================================================
+#  ms-cad-user — ambiente de estudo local
+#  Mongo + Kafka (KRaft single-node) + GUIs + worker (consumer → Mongo).
+#  Use: docker-compose up -d --build   (o `generator` roda via `make load`)
+# =============================================================================
+name: ms-cad-user
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB (banco de destino dos usuários)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: mscaduser-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # GUI do MongoDB (criar/editar/consultar documentos visualmente)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mscaduser-mongo-express
+    restart: unless-stopped
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-admin}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Kafka single-node (KRaft — sem Zookeeper)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: mscaduser-kafka
+    restart: unless-stopped
+    ports:
+      # host ${KAFKA_PORT} -> listener EXTERNAL (mesma porta dentro/fora p/ advertised)
+      - "${KAFKA_PORT:-9095}:${KAFKA_PORT:-9095}"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Listeners SEM endereço fixo (padrão da imagem apache/kafka): o docker
+      # publica a porta EXTERNAL no host; INTERNAL é usado dentro do compose.
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:${KAFKA_PORT:-9095}
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${KAFKA_PORT:-9095}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      CONFLUENT_SUPPORT_METRICS_ENABLE: "false"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  # Cria os tópicos assim que o Kafka estiver saudável
+  kafka-init:
+    image: apache/kafka:3.9.0
+    container_name: mscaduser-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        for t in "${KAFKA_TOPIC:-cad-user.created}" "${KAFKA_TOPIC_DLQ:-cad-user.dlq}"; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+            --create --topic "$$t" \
+            --partitions ${KAFKA_TOPIC_PARTITIONS:-6} \
+            --replication-factor ${KAFKA_TOPIC_REPLICAS:-1} || true
+        done
+        echo "== tópicos criados =="
+    restart: "no"
+
+  # GUI do Kafka (tópicos, mensagens, consumer groups, offsets)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: mscaduser-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_UI_PORT:-9085}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
+
+  # ---------------------------------------------------------------------------
+  # Worker (consumer group -> MongoDB). Rodar em compose mantém o pipeline vivo.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TARGET: cmd/worker
+    container_name: mscaduser-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # rede interna do compose (sobrescreve os valores de host do .env)
+      KAFKA_BROKERS: kafka:9092
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGO_DATABASE: cad_user
+      MONGO_COLLECTION: users
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
+  # Generator (carga em massa). Roda pontualmente via profile:
+  #   docker-compose run --rm generator --total 1000 --rate 200
+  # (o caminho recomendado do dia a dia é: make load — roda no host)
+  # ---------------------------------------------------------------------------
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TARGET: cmd/generator
+    container_name: mscaduser-generator
+    profiles: ["tools"]
+    env_file:
+      - .env
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+volumes:
+  mongodb_data:
+  kafka_data:

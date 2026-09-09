@@ -1,0 +1,19 @@
+# Ambiente / segredos
+.env
+*.env.local
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+/tmp/
