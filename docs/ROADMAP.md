@@ -12,6 +12,15 @@ projeto em fases pequenas e verificáveis.
       dados sintéticos pt-BR realistas e determinísticos por seed.
 - [x] `cmd/worker`: consumer group → batch → Mongo `bulkWrite` upsert por CPF
       (idempotência; validado com 505k docs, lag 0, `mortos=0`).
+- [x] **Escala horizontal**: tópico com 6 partições + 3 workers no mesmo group
+      (`worker`, `worker-2`, `worker-3`) — rebalance 2/2/2 comprovado com carga
+      real e consumo paralelo.
+- [x] **Benchmark produtor × consumidor**: produtor confirmou ~6.000 msg/s sem
+      erro; consumer sustentou ~5.6–6.3k msg/s; `make lag`/`make logs-once`
+      criados para inspeção rápida.
+- [x] **Volume de estudo**: base carregada com várias seeds (total no Mongo já
+      em ~2M de documentos) para Fase 3.
+- [x] Comentários didáticos em todo o código Go + `docs/ROADMAP.md` no repo.
 - [x] Domínio Go com CPF válido (algoritmo oficial), envelope de evento
       versionado, testes com ~82% de cobertura no domínio.
 - [x] Publicado no GitHub (`alppinheiro/ms-cad-user`) e ambiente local OK.
@@ -20,8 +29,8 @@ projeto em fases pequenas e verificáveis.
 ## 🔜 Próximas fases (itens para não esquecer)
 
 ### Fase 3 — Estudo de consultas Mongo (em andamento)
-- [ ] Rodar/bateria de consultas com **volume real (~505k docs)** e registrar
-      tempos de resposta.
+- [ ] Rodar/bateria de consultas com **volume real (~2M docs já carregados)** e
+      registrar tempos de resposta.
 - [ ] Comparar consultas **com e sem índice** usando
       `.explain("executionStats")` e documentar no README/docs.
 - [ ] Ampliar `scripts/mongo/consultas_estudo.js`: mais agregações, índices
