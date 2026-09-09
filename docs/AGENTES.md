@@ -13,10 +13,10 @@ forma sequencial (coupling alto); a paralelização brilha da **Fase 3 em diante
 
 | Agente | Arquivos | Com quem conversa (contratos) |
 |---|---|---|
-| `cad-user-infra` | docker-compose.yml, Dockerfile, Makefile, .env*, healthchecks | Nenhum código Go; portas |
+| `cad-user-infra` | docker-compose.yml (inclui réplicas `worker`/`worker-2`/`worker-3`), Dockerfile, Makefile (`logs`/`logs-once`/`lag`), .env*, healthchecks | Nenhum código Go; portas; nº de partições define máx. de workers |
 | `cad-user-domain` | internal/domain/* (+ testes) | Contrato: structs + envelope (quem publica/consome usa) |
-| `cad-user-kafka` | internal/kafka/*, cmd/generator | Consome `domain.Envelope` e `domain.User` |
-| `cad-user-mongo` | internal/mongodb/*, cmd/worker, scripts/mongo/* | Consome `domain.User`; índice único em `cpf` |
+| `cad-user-kafka` | internal/kafka/*, cmd/generator | Consome `domain.Envelope`/`domain.User`; grupo com 3 membros; use `make lag` |
+| `cad-user-mongo` | internal/mongodb/*, cmd/worker, scripts/mongo/* | Consome `domain.User`; índice único em `cpf`; Mongo single-node é o gargalo |
 | `cad-user-reviewer` | leitura de qualquer arquivo | Não edita; devolve parecer |
 
 ## Sugestões de sprint paralelizáveis
@@ -48,4 +48,5 @@ forma sequencial (coupling alto); a paralelização brilha da **Fase 3 em diante
 - [ ] `go test ./...` verde (domínio ≥ ~80% cobertura).
 - [ ] Fluxo validado ponta a ponta ao menos uma vez: `make load` pequeno
       (ex.: TOTAL=1000) e `db.users.countDocuments()` bate com o total.
+- [ ] `make lag` com LAG=0 após a carga de teste (workers parados/drenados).
 - [ ] Sem alteração fora da fronteira do papel (revise o diff).
