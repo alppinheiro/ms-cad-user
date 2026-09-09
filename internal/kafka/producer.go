@@ -16,6 +16,7 @@ import (
 type Producer struct {
 	ap        sarama.AsyncProducer
 	topic     string
+	done      chan struct{}
 	successes atomic.Int64
 	failures  atomic.Int64
 }
@@ -45,27 +46,22 @@ func NewProducer(brokers []string, topic string) (*Producer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sarama async producer: %w", err)
 	}
-	p := &Producer{ap: ap, topic: topic}
+	p := &Producer{ap: ap, topic: topic, done: make(chan struct{})}
 	go p.drain()
 	return p, nil
 }
 
 // drain contabiliza confirmações e erros até o produtor ser fechado.
+// Importante: drena CADA canal até fechar (range), senão o encerramento de um
+// canal (ex.: Errors) faria o dreno terminar antes de contar os Successes.
 func (p *Producer) drain() {
-	for {
-		select {
-		case _, ok := <-p.ap.Successes():
-			if !ok {
-				return
-			}
-			p.successes.Add(1)
-		case err, ok := <-p.ap.Errors():
-			if !ok {
-				return
-			}
-			p.failures.Add(1)
-			slog.Error("falha ao publicar mensagem", "erro", err.Err, "topico", err.Msg.Topic)
-		}
+	defer close(p.done)
+	for range p.ap.Successes() {
+		p.successes.Add(1)
+	}
+	for err := range p.ap.Errors() {
+		p.failures.Add(1)
+		slog.Error("falha ao publicar mensagem", "erro", err.Err, "topico", err.Msg.Topic)
 	}
 }
 
@@ -83,7 +79,10 @@ func (p *Producer) Counters() (successes, failures int64) {
 	return p.successes.Load(), p.failures.Load()
 }
 
-// Close aguarda o flush de todas as mensagens pendentes e fecha os canais.
+// Close aguarda o flush de todas as mensagens pendentes, o encerramento dos
+// canais e o fim do dreno de contadores (evita race na leitura final).
 func (p *Producer) Close() error {
-	return p.ap.Close()
+	err := p.ap.Close()
+	<-p.done
+	return err
 }

@@ -119,6 +119,23 @@ loop:
 	}
 
 	close(doneMetrics)
+
+	// Aguarda todas as confirmações do broker antes de fechar (evita subcontar
+	// mensagens que ainda estão "em voo" com acks=all). Timeout de segurança.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		okNow, failNow := prod.Counters()
+		if okNow+failNow >= enviadas {
+			break
+		}
+		if time.Now().After(deadline) {
+			slog.Warn("timeout aguardando confirmações; mensagens restantes serão flusheadas no Close",
+				"confirmadas", okNow, "enviadas", enviadas)
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	if err := prod.Close(); err != nil { // aguarda flush completo
 		slog.Error("erro ao fechar produtor", "erro", err)
 		os.Exit(1)
