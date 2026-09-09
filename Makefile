@@ -12,7 +12,7 @@ RATE ?= $(LOAD_RATE)
 KAFKA_BROKERS ?= localhost:9095
 MONGODB_URI ?= mongodb://localhost:27017
 
-.PHONY: help fmt build vet test check up infra worker down ps logs logs-once \
+.PHONY: help fmt build vet test check up infra worker down ps logs logs-once lag \
 	load run-worker mongo-shell topics consume reset
 
 help:
@@ -28,6 +28,7 @@ help:
 	@echo "  make down         - derruba a stack (mantém volumes)"
 	@echo "  make ps / logs    - status / logs em tempo real (SVC= para filtrar)"
 	@echo "  make logs-once    - mostra o último estado dos logs e encerra"
+	@echo "  make lag          - lag do consumer group (0 = não está consumindo)"
 	@echo "  make load         - roda o generator no host (TOTAL= RATE= SEED=)"
 	@echo "  make run-worker   - roda o worker no host (go run)"
 	@echo "  make mongo-shell  - mongosh dentro do container"
@@ -72,6 +73,10 @@ logs:
 
 logs-once:
 	$(COMPOSE) logs --tail=20 $(SVC)
+
+lag:
+	$(COMPOSE) exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+		--bootstrap-server localhost:9092 --describe --group $(KAFKA_CONSUMER_GROUP)
 
 reset:
 	$(COMPOSE) down -v
