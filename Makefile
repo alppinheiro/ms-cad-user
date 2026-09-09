@@ -5,6 +5,8 @@ COMPOSE ?= docker-compose
 LOAD_TOTAL ?= 500000
 LOAD_RATE ?= 2000
 SEED ?= 42
+# Serviços exibidos por `make logs` (padrão: todos os workers). Ex.: make logs SVC=worker
+SVC ?= worker worker-2
 TOTAL ?= $(LOAD_TOTAL)
 RATE ?= $(LOAD_RATE)
 KAFKA_BROKERS ?= localhost:9095
@@ -24,7 +26,7 @@ help:
 	@echo "  make infra        - sobe apenas Mongo + Kafka + GUIs + kafka-init"
 	@echo "  make worker       - (re)constrói e sobe só o worker"
 	@echo "  make down         - derruba a stack (mantém volumes)"
-	@echo "  make ps / logs    - status / logs da stack"
+	@echo "  make ps / logs    - status / logs (make logs SVC=worker para um só)"
 	@echo "  make load         - roda o generator no host (TOTAL= RATE= SEED=)"
 	@echo "  make run-worker   - roda o worker no host (go run)"
 	@echo "  make mongo-shell  - mongosh dentro do container"
@@ -65,7 +67,7 @@ ps:
 	$(COMPOSE) ps
 
 logs:
-	$(COMPOSE) logs -f --tail=100 worker
+	$(COMPOSE) logs -f --tail=100 $(SVC)
 
 reset:
 	$(COMPOSE) down -v
