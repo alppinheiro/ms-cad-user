@@ -106,3 +106,55 @@ quisermos automação determinística (ex.: mover card dispara agente), o caminh
 o **nosso MCP server em Go sobre a REST API v2 do Miro** (planejado no roadmap):
 `POST /v2/boards`, `POST /v2/boards/{id}/frames`, `POST /v2/boards/{id}/cards`,
 `PATCH /v2/boards/{id}/items/{id}` (mover entre frames) e **webhooks**.
+
+## 7) Caminho alternativo (REST API): como criar o app e obter o token
+
+> Use este caminho se quiser automação determinística (sem o limite diário do
+> MCP). Diferente do MCP, aqui é preciso criar um **app** no Miro.
+
+**Funciona no plano gratuito?** Sim — o procedimento de *Developer team* vale
+para assinaturas **não-Enterprise** (Free/Starter/Business), e a REST API é
+"any plan, free to use" (comparativo oficial do Miro). O que muda por plano é o
+**limite diário do MCP** (Free 100 / Starter 500 / Business 2.000 / Enterprise
+10.000 tool calls), que **não** se aplica à REST API.
+
+### Passo a passo (onde encontrar)
+
+1. **Criar o Developer team** (a "sandbox" onde os apps vivem):
+   - Link direto: **https://miro.com/app/dashboard/?createDevTeam=1**
+   - Ou: avatar → **Settings** → aba **Your apps** → **+ Create new app**
+     (se a aba não aparecer, é porque o Developer team ainda não existe — use o
+     link direto acima);
+2. Aceite os termos → **Create team**;
+3. No modal **Create new app**, dê um nome (ex.: `ms-cad-user-cli`) → **Create app**;
+4. **Configurar o app**:
+   - **Redirect URI** (p/ OAuth): ex. `http://localhost:8080/callback`;
+   - **Scopes**: marcar `boards:read` e `boards:write`;
+   - **Tipo de token**: expirável (1h + refresh 60d) ou **não-expirável**
+     (escolhido na criação/instalação; não pode ser alterado depois);
+5. **Install app** no seu time e autorizar;
+6. Copiar o **access token** e colar no `.env` (arquivo **ignorado pelo git**):
+   ```
+   MIRO_ACCESS_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxx
+   MIRO_BOARD_ID=            # opcional: board já existente
+   ```
+
+### O que o nosso CLI faria com esse token (automático)
+
+```bash
+POST /v2/boards                              # cria o board
+POST /v2/boards/{id}/frames                  # Backlog/Doing/Review/Done
+POST /v2/boards/{id}/cards                   # 3 atividades
+PATCH /v2/boards/{id}/items/{itemId}         # move card entre colunas
+POST /v2/boards/{id}/items/{id}/comments     # progresso
+```
+
+### Solução de problemas comuns
+
+| Sintoma | Causa provável |
+|---|---|
+| Não encontro "Your apps" nas configurações | Developer team ainda não criado → use `https://miro.com/app/dashboard/?createDevTeam=1` |
+| Não vejo o token | Falta concluir **Install app**/autorização, ou o app está em outro time |
+| `403` nas chamadas | Scopes faltando (`boards:write`) ou app não instalado no time do board |
+| Quero evitar redirect URI | Use o token **não-expirável** (definido na criação do app) |
+
