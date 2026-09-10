@@ -58,6 +58,14 @@ projeto em fases pequenas e verificáveis.
 - [ ] Multiagente: sprints paralelos usando `.github/agents/*` e `docs/AGENTES.md`
       (ex.: agentes `cad-user-mongo` e `cad-user-kafka` em frentes independentes).
 
+### Gestão de atividades (Miro)
+- [x] Configuração do **MCP oficial do Miro** no VS Code
+      (`.vscode/mcp.json` → `https://mcp.miro.com/`) e guia `docs/MIRO_POC.md`.
+- [ ] Executar a PoC: criar board Kanban (Backlog/Doing/Review/Done) com as 3
+      atividades do roadmap e validar o acompanhamento pelos agentes.
+- [ ] (Opcional) MCP próprio em Go sobre a REST API v2 do Miro com **webhooks**
+      (mover card dispara agente) — quando a automação determinística for necessária.
+
 ## 📌 Ideias futuras / pendências menores
 - Autoscaler por lag (tema estudado no workers-kafka; portar/adaptar aqui).
 - Compressão/mensagens menores (medir ganho de throughput no produtor).

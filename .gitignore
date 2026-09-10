@@ -9,8 +9,9 @@ bin/
 *.out
 coverage.*
 
-# IDE
-.vscode/
+# IDE (mantendo o mcp.json versionado para o time)
+.vscode/*
+!.vscode/mcp.json
 .idea/
 .DS_Store
 

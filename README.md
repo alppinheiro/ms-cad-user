@@ -147,6 +147,8 @@ Reexecutar com a mesma seed não duplica: o upsert por CPF atualiza os registros
 Consulte o **roadmap completo em [`docs/ROADMAP.md`](docs/ROADMAP.md)**.
 Dica de consultas no GUI: **[`docs/MONGO_EXPRESS.md`](docs/MONGO_EXPRESS.md)**
 (sintaxe aceita: `ISODate("...")`; Mongo Express não entende `{"$date": ...}`).
+Gestão de atividades no Miro: **[`docs/MIRO_POC.md`](docs/MIRO_POC.md)** (PoC com
+o MCP oficial no VS Code — board Kanban + acompanhamento).
 registrados para não esquecer: API REST, DLQ real, Redis, observabilidade,
 bateria de consultas com/sem índice, testes de integração e CI, etc.).
 

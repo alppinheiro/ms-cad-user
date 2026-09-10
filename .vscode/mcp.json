@@ -1,0 +1,11 @@
+{
+  // MCP oficial do Miro (servidor remoto, autenticação OAuth 2.1 via VS Code).
+  // Ao abrir o projeto, clique em "Start" sobre este servidor e confirme o trust;
+  // o VS Code abrirá o fluxo OAuth no navegador (escolha o time do Miro).
+  "servers": {
+    "miro": {
+      "type": "http",
+      "url": "https://mcp.miro.com/"
+    }
+  }
+}
