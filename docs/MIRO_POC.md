@@ -121,10 +121,11 @@ para assinaturas **não-Enterprise** (Free/Starter/Business), e a REST API é
 ### Passo a passo (onde encontrar)
 
 1. **Criar o Developer team** (a "sandbox" onde os apps vivem):
-   - Link direto: **https://miro.com/app/dashboard/?createDevTeam=1**
-   - Ou: avatar → **Settings** → aba **Your apps** → **+ Create new app**
-     (se a aba não aparecer, é porque o Developer team ainda não existe — use o
-     link direto acima);
+   - Link direto para criar o Developer team: **https://miro.com/app/dashboard/?createDevTeam=1**
+   - Página **Your apps** (onde ficam os apps): **https://miro.com/app/settings/user-profile/apps**
+     (também acessível por: avatar → **Settings** → aba **Your apps** → **+ Create new app**)
+     ⚠️ Se a aba/page "Your apps" parecer vazia/sem a opção de criar, é porque o
+     **Developer team ainda não existe** — use primeiro o link direto acima;
 2. Aceite os termos → **Create team**;
 3. No modal **Create new app**, dê um nome (ex.: `ms-cad-user-cli`) → **Create app**;
 4. **Configurar o app**:
