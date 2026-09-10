@@ -48,6 +48,10 @@ visualização Kanban via canvas).
 
 ## 4) Prompt pronto (copie e cole no Chat em modo Agent)
 
+> 💡 Mais rápido ainda: nos prompts do VS Code, use
+> **[`criar-board-miro`](../.github/prompts/criar-board-miro.prompt.md)**
+> (digite `/criar-board-miro` no chat depois de conectar o MCP).
+
 ```text
 Crie um novo board no Miro chamado "ms-cad-user — Roadmap de Estudos".
 
