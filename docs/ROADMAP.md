@@ -33,6 +33,9 @@ projeto em fases pequenas e verificáveis.
       registrar tempos de resposta.
 - [ ] Comparar consultas **com e sem índice** usando
       `.explain("executionStats")` e documentar no README/docs.
+- [x] Documentar a sintaxe do Mongo Express (`docs/MONGO_EXPRESS.md`):
+      aceita `ISODate("...")` e **não** aceita Extended JSON `{"$date": ...}`
+      (comprovado: retorna "No documents found").
 - [ ] Ampliar `scripts/mongo/consultas_estudo.js`: mais agregações, índices
       parciais/TTL, busca textual, `$lookup`, projeções e paginação.
 - [ ] Criar `docs/MONGO_QUERIES.md` com os exemplos + explicação de cada plano.

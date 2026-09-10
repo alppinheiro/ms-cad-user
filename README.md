@@ -144,7 +144,9 @@ Reexecutar com a mesma seed não duplica: o upsert por CPF atualiza os registros
 
 ## Próximas fases (estudo)
 
-Consulte o **roadmap completo em [`docs/ROADMAP.md`](docs/ROADMAP.md)** (itens
+Consulte o **roadmap completo em [`docs/ROADMAP.md`](docs/ROADMAP.md)**.
+Dica de consultas no GUI: **[`docs/MONGO_EXPRESS.md`](docs/MONGO_EXPRESS.md)**
+(sintaxe aceita: `ISODate("...")`; Mongo Express não entende `{"$date": ...}`).
 registrados para não esquecer: API REST, DLQ real, Redis, observabilidade,
 bateria de consultas com/sem índice, testes de integração e CI, etc.).
 
